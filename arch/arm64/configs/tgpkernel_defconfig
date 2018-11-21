@@ -554,7 +554,7 @@ CONFIG_ARM64_SW_TTBR0_PAN=y
 CONFIG_CMDLINE=""
 # CONFIG_EFI is not set
 # CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE is not set
-# CONFIG_LOD_SEC is not set
+CONFIG_LOD_SEC=y
 
 #
 # Userspace binary formats
