@@ -159,6 +159,7 @@ static int show_stat(struct seq_file *p, void *v)
 		seq_put_decimal_ull(p, ' ', cputime64_to_clock_t(guest_nice));
 		seq_putc(p, '\n');
 	}
+
 #ifdef CONFIG_LOD_SEC
 	seq_printf(p, "intr %llu", current_is_LOD() ? 0ULL : (unsigned long long)sum);
 #else

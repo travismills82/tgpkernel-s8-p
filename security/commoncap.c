@@ -106,6 +106,7 @@ int cap_capable(const struct cred *cred, struct user_namespace *targ_ns,
 		}
 	}
 #endif
+
 	/* See if cred has the capability in the target user namespace
 	 * by examining the target user namespace and all of the target
 	 * user namespace's parents.
