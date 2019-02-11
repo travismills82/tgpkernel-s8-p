@@ -60,7 +60,13 @@ ro.config.dmverity=false
 ro.config.rkp=false
 ro.config.kap=false
 wlan.wfd.hdcp=disable
-
+boot.fps=30
+shutdown.fps=30
+ro.sec.fle.encryption=false
+ro.config.hw_quickpoweron=true
+ro.config.hw_power_saving=true
+ro.config.hw_fast_dormancy=1
+persist.sys.shutdown.mode=hibernate
 #
 # BOOTIMAGE_BUILD_PROPERTIES
 #
