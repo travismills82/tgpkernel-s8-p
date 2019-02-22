@@ -9,3 +9,4 @@ on fs
     mount ext4 /dev/block/platform/11120000.ufs/by-name/OMR /omr nosuid nodev noatime noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic
     chown system system /omr
     chmod 0771 /omr
+

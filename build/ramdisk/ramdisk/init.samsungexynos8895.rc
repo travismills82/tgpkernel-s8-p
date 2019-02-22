@@ -1,8 +1,9 @@
 import init.samsungexynos8895.usb.rc
 import init.baseband.rc
 import /init.wifi.rc
-import init.gps.rc
 import init.carrier.rc
+import init.gps.rc
+import atrace.rc
 
 on early-init
     mkdir /efs 0771 radio system
@@ -31,12 +32,43 @@ on init
     #Google FRP solution
     symlink /dev/block/platform/11120000.ufs/by-name/PERSISTENT /dev/block/persistent
 
+on post-fs
+    # set RLIMIT_MEMLOCK to 64MB
+    setrlimit 8 67108864 67108864
+
 on post-fs-data
+# setup cgroup freezer for freecess
+    mkdir /dev/freezer
+    mount cgroup none /dev/freezer freezer
+    mkdir /dev/freezer/frozen
+    mkdir /dev/freezer/thaw
+    write /dev/freezer/frozen/freezer.state FROZEN
+    write /dev/freezer/thaw/freezer.state THAWED
+
+# MARs for freecess
+    chown system system /dev/freezer
+    chown system system /dev/freezer/frozen
+    chown system system /dev/freezer/frozen/tasks
+    chown system system /dev/freezer/frozen/cgroup.procs
+    chown system system /dev/freezer/thaw
+    chown system system /dev/freezer/thaw/tasks
+    chown system system /dev/freezer/thaw/cgroup.procs
+
+# MARs for freecess
+    chmod 0644 /dev/freezer/frozen/tasks
+    chmod 0644 /dev/freezer/frozen/cgroup.procs
+    chmod 0644 /dev/freezer/thaw/tasks
+    chmod 0644 /dev/freezer/thaw/cgroup.procs
+
 # Log data folder
     mkdir /data/log 0771 radio system
 
+    mkdir /data/vendor 0771 radio system
+    mkdir /data/vendor/log 0771 radio system
+
 # Directories for audio
     mkdir /data/log/abox 0771 audioserver system
+    mkdir /data/vendor/log/abox 0771 audioserver system
     mkdir /data/firmware 0770 audioserver system
     mkdir /efs/maxim 0770 audioserver audio
 
@@ -47,7 +79,8 @@ on post-fs-data
     setprop vold.post_fs_data_done 1
 
 # Permissions Camera
-    mkdir /data/camera 0770 cameraserver system
+    mkdir /data/vendor/camera 0770 cameraserver system
+    chown cameraserver cameraserver /sys/kernel/mm/vmscan/mem_boost_mode
     chown system radio /sys/class/camera/rear/rear_camfw
     chown system radio /sys/class/camera/rear/rear_camfw_full
     chown system radio /sys/class/camera/rear/rear_checkfw_user
@@ -103,6 +136,20 @@ on post-fs-data
 
     chmod 0755 /sys/kernel/debug/tracing
     restorecon /sys/kernel/debug/tracing/trace_marker
+
+# Samsung Pay
+    mkdir /efs/pfw_data 0760 spay spay    
+
+# MST/NFC Switch
+    chown spay system /dev/mst_ctrl
+    chmod 0660 /dev/mst_ctrl
+
+# for WIFI MAC address
+    mkdir /efs/wifi 0775 wifi root
+    chown wifi root /efs/wifi/.mac.info
+    chmod 0664 /efs/wifi/.mac.info
+    chown wifi root /efs/wifi/.mac.cob
+    chmod 0664 /efs/wifi/.mac.cob
 
 on boot
 # SSWAP
@@ -179,6 +226,23 @@ on boot
     chown system system /sys/devices/system/cpu/cpu4/cpufreq/interactive/mode
     chmod 0660 /sys/devices/system/cpu/cpu4/cpufreq/interactive/mode
 
+    #HMP
+    chown system system /sys/kernel/hmp/up_threshold
+    chown system system /sys/kernel/hmp/family_boost
+    chown system system /sys/module/cpuidle/parameters/priv_disable
+
+    chmod 0664 /sys/kernel/hmp/up_threshold
+    chmod 0664 /sys/kernel/hmp/family_boost
+    chmod 0664 /sys/module/cpuidle/parameters/priv_disable
+
+    #CPUFREQ
+    chown system system /sys/power/cpufreq_min_limit
+    chown system system /sys/power/cpufreq_max_limit
+    chown system system /sys/power/cpufreq_table
+
+    chmod 0664 /sys/power/cpufreq_min_limit
+    chmod 0664 /sys/power/cpufreq_max_limit
+
     # MSP Core Status
     chown system system /sys/devices/system/cpu/cpu1/online
     chown system system /sys/devices/system/cpu/cpu2/online
@@ -201,6 +265,7 @@ on boot
 
 # SEC_PM sysfs
     # DVFS & Hotplug
+    chown system system /sys/devices/system/cpu/kernel_max
     chown system system /sys/power/cpuhotplug/enabled
     chown system system /sys/power/cpuhotplug/min_online_cpu
     chown system system /sys/power/cpuhotplug/max_online_cpu
@@ -488,10 +553,12 @@ on boot
     chown system system /dev/cpuset/foreground/cpus
     chown system system /dev/cpuset/background/cpus
     chown system system /dev/cpuset/system-background/cpus
+    chown system system /dev/cpuset/surfaceflinger/cpus
     chmod 664 /dev/cpuset/top-app/cpus
     chmod 664 /dev/cpuset/foreground/cpus
     chmod 664 /dev/cpuset/background/cpus
     chmod 664 /dev/cpuset/system-background/cpus
+    chmod 664 /dev/cpuset/surfaceflinger/cpus
     write /dev/cpuset/top-app/cpus 0-7
     write /dev/cpuset/top-app/mems 0
     write /dev/cpuset/top-app/family_boost 1
@@ -501,6 +568,8 @@ on boot
     write /dev/cpuset/background/mems 0
     write /dev/cpuset/system-background/cpus 0-2
     write /dev/cpuset/system-background/mems 0
+    write /dev/cpuset/surfaceflinger/cpus 0-2
+    write /dev/cpuset/surfaceflinger/mems 0
 
 on fs
     mount_all /fstab.samsungexynos8895
@@ -535,6 +604,7 @@ on fs
     chown system system /sys/class/lcd/panel/SVC_OCTA
     chown system system /sys/class/lcd/panel/xtalk_mode
     chown system system /sys/class/lcd/panel/poc
+    chown system system /sys/class/lcd/panel/poc_onoff
 
 # Permissions for LCD COPR
     chown system system /sys/class/lcd/panel/copr
@@ -614,6 +684,9 @@ on fs
 
 # Sensors
 # Fingerprint_sensor
+    chmod 0660 /dev/vfsspi
+    chown system system /dev/vfsspi
+
     mkdir /dev/validity 0770 system system
     chown system radio /sys/class/fingerprint/fingerprint/type_check
     chown system radio /sys/class/fingerprint/fingerprint/name
@@ -802,7 +875,7 @@ on fs
     chown system system /dev/network_throughput
 
 # ARGOSD
-    service argos-daemon /system/vendor/bin/argosd
+service argos-daemon /vendor/bin/argosd
     class main
     user system
     group system radio
@@ -832,13 +905,6 @@ on fs
 #    class main
 #    user root
 #    group system
-
-# VC daemon
-#    service VC-daemon /system/bin/vcd
-#    class main
-#    user root
-#    group system
-#    seclabel u:r:vcd:s0
 
 # SCE daemon
 #    service SCE-daemon /system/bin/sced
@@ -882,6 +948,7 @@ on property:ro.bootmode=charger
     mount ext4 /dev/block/platform/11120000.ufs/by-name/SYSTEM /system wait ro
     wait /dev/block/platform/11120000.ufs/by-name/EFS
     mount ext4 /dev/block/platform/11120000.ufs/by-name/EFS /efs nosuid nodev noatime noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic
+    mkdir /efs/lpm 0775 system system
     class_start sec-charger
 # umount service
 service umount_service /system/bin/umount -D /preload
@@ -896,18 +963,6 @@ on property:persist.sys.storage_preload=1
 
 on property:persist.sys.storage_preload=0
     start umount_service
-
-# WSM service startup
-service wsmd /system/bin/wsmd
-    class core
-    user system
-    group system
-    disabled
-on property:ro.wsmd.enable=true
-    mkdir /dev/socket/wsm_socket
-    chmod 0711 /dev/socket/wsm_socket
-    chown system system /dev/socket/wsm_socket
-    start wsmd
 
 service prepare_param /system/bin/prepare_param.sh /dev/block/platform/11120000.ufs/by-name/PARAM
     class core
