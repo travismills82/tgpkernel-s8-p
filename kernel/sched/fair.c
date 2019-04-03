@@ -3343,25 +3343,27 @@ static void remove_entity_load_avg(struct sched_entity *se)
 	u64 last_update_time;
 
 #ifndef CONFIG_64BIT
-static inline u64 cfs_rq_last_update_time(struct cfs_rq *cfs_rq)
-{
 	u64 last_update_time_copy;
-	u64 last_update_time;
 
 	do {
 		last_update_time_copy = cfs_rq->load_last_update_time_copy;
 		smp_rmb();
 		last_update_time = cfs_rq->avg.last_update_time;
 	} while (last_update_time != last_update_time_copy);
-
-	return last_update_time;
-}
 #else
-static inline u64 cfs_rq_last_update_time(struct cfs_rq *cfs_rq)
-{
-	return cfs_rq->avg.last_update_time;
-}
+	last_update_time = cfs_rq->avg.last_update_time;
 #endif
+
+	__update_load_avg(last_update_time, cpu_of(rq_of(cfs_rq)), &se->avg, 0, 0, NULL);
+	atomic_long_add(se->avg.load_avg, &cfs_rq->removed_load_avg);
+	atomic_long_add(se->avg.util_avg, &cfs_rq->removed_util_avg);
+
+	if(entity_is_task(se)) {
+		trace_sched_task_load_contrib(task_of(se), se->avg.load_avg);
+		trace_sched_task_util_contrib(task_of(se), se->avg.util_avg);
+		trace_sched_task_runnable_ratio(task_of(se), se->avg.hmp_load_avg);
+	}
+}
 
 /*
  * Update the rq's load with the elapsed running time before entering
