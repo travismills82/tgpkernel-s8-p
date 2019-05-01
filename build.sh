@@ -6,7 +6,7 @@
 
 # Set Variables
 export RDIR=$(pwd)
-export KERNELNAME=TGPKernel
+export KERNELNAME=Kernel
 export VERSION_NUMBER=$(<build/version)
 export ARCH=arm64
 export BUILD_CROSS_COMPILE=~/android/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
