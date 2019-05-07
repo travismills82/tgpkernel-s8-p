@@ -22,6 +22,29 @@
 #define DEFAULT_DUAL_CHANGE_MS (15)		/* 15 ms */
 #define DEFAULT_BOOT_ENABLE_MS (0)		/* boot delay is not applied */
 #define RETRY_BOOT_ENABLE_MS (100)		/* 100 ms */
+#define NUM_OF_GROUP	2
+#define ATTR_COUNT	14
+
+#define LIT	0
+#define BIG	1
+
+extern unsigned long arg_cpu_max_c2;
+static unsigned long arg_overclock = 0;
+
+static int read_overclock(char *oc)
+{
+	unsigned long ui_oc;
+	int ret;
+
+	ret = kstrtoul(oc, 0, &ui_oc);
+	if (ret)
+		return -EINVAL;
+
+	arg_overclock = ui_oc;
+
+	return ret;
+}
+__setup("overclock=", read_overclock);
 
 enum hpgov_event {
 	HPGOV_SLACK_TIMER_EXPIRED = 1,	/* slack timer expired */
@@ -416,6 +439,150 @@ static void hpgov_boot_enable(struct work_struct *work)
 		schedule_delayed_work_on(0, &hpgov_boot_work, msecs_to_jiffies(RETRY_BOOT_ENABLE_MS));
 }
 
+static int exynos_hp_gov_pm_suspend_notifier(struct notifier_block *notifier,
+				       unsigned long pm_event, void *v)
+{
+	int online_cnt;
+	unsigned long timeout;
+	long use_fast_hp = FAST_HP;
+
+	if (pm_event != PM_SUSPEND_PREPARE)
+		return NOTIFY_OK;
+
+	pm_qos_update_request_param(&hpgov_suspend_pm_qos,
+			PM_QOS_CPU_ONLINE_MAX_DEFAULT_VALUE, (void *)&use_fast_hp);
+
+	online_cnt = min(pm_qos_request(PM_QOS_CPU_ONLINE_MIN),
+				pm_qos_request(PM_QOS_CPU_ONLINE_MAX));
+
+	timeout = jiffies + msecs_to_jiffies(10000);
+	/* waiting for qoad mode */
+	if (online_cnt > cpumask_weight(cpu_coregroup_mask(0)))
+		while (cpumask_weight(cpu_online_mask) < online_cnt) {
+			msleep(3);
+			if (time_after(jiffies, timeout))
+				BUG_ON(1);
+		}
+
+	exynos_hpgov.suspend = true;
+
+	return NOTIFY_OK;
+}
+
+static int exynos_hp_gov_pm_resume_notifier(struct notifier_block *notifier,
+				       unsigned long pm_event, void *v)
+{
+	if (pm_event != PM_POST_SUSPEND)
+		return NOTIFY_OK;
+
+	exynos_hpgov.suspend = false;
+	pm_qos_update_request(&hpgov_suspend_pm_qos,
+			PM_QOS_CPU_ONLINE_MIN_DEFAULT_VALUE);
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block exynos_hp_gov_suspend_nb = {
+	.notifier_call = exynos_hp_gov_pm_suspend_notifier,
+	.priority = INT_MAX,
+};
+
+static struct notifier_block exynos_hp_gov_resume_nb = {
+	.notifier_call = exynos_hp_gov_pm_resume_notifier,
+	.priority = INT_MIN,
+};
+
+static int __init exynos_hpgov_parse_dt(void)
+{
+	int i, freq, max_freq;
+	struct device_node *np = of_find_node_by_name(NULL, "hotplug_governor");
+
+	if (of_property_read_u32(np, "single_change_ms", &exynos_hpgov.single_change_ms))
+		goto exit;
+
+	if (of_property_read_u32(np, "dual_change_ms", &exynos_hpgov.dual_change_ms))
+		goto exit;
+
+	if (of_property_read_u32(np, "quad_change_ms", &exynos_hpgov.quad_change_ms))
+		goto exit;
+
+	if (of_property_read_u32(np, "big_heavy_thr", &exynos_hpgov.big_heavy_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "lit_heavy_thr", &exynos_hpgov.lit_heavy_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "big_idle_thr", &exynos_hpgov.big_idle_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "lit_idle_thr", &exynos_hpgov.lit_idle_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "ldsum_heavy_thr", &exynos_hpgov.ldsum_heavy_thr))
+		goto exit;
+
+	if (of_property_read_u32(np, "ldsum_enabled", &exynos_hpgov.ldsum_enabled))
+		goto exit;
+
+	if (of_property_read_u32(np, "skip_lit_enabled", &exynos_hpgov.skip_lit_enabled))
+		goto exit;
+
+	if (of_property_read_u32(np, "cl_busy_ratio", &exynos_hpgov.cl_busy_ratio))
+		goto exit;
+
+	if (of_property_read_u32(np, "cal-id", &exynos_hpgov.cal_id))
+		goto exit;
+
+
+	max_freq = arg_cpu_max_c2;
+	if (!max_freq)
+		goto exit;
+	exynos_hpgov.maxfreq_table[SINGLE] = max_freq;
+
+	if (arg_overclock == 1) {
+		exynos_hpgov.maxfreq_table[DUAL] = 2314000;
+		exynos_hpgov.maxfreq_table[TRIPLE] = 1924000;
+		exynos_hpgov.maxfreq_table[QUAD] = 1924000;
+
+	} else if (arg_overclock == 2) {
+		exynos_hpgov.maxfreq_table[DUAL] = 2496000;
+		exynos_hpgov.maxfreq_table[TRIPLE] = 2002000;
+		exynos_hpgov.maxfreq_table[QUAD] = 2002000;
+
+	} else {
+		if (of_property_read_u32(np, "dual_freq", &freq))
+			goto exit;
+		exynos_hpgov.maxfreq_table[DUAL] = min(freq, max_freq);
+
+		if (of_property_read_u32(np, "triple_freq", &freq))
+			goto exit;
+		exynos_hpgov.maxfreq_table[TRIPLE] = min(freq, max_freq);
+
+		if (of_property_read_u32(np, "quad_freq", &freq))
+			goto exit;
+		exynos_hpgov.maxfreq_table[QUAD] = min(freq, max_freq);
+	}
+	exynos_hpgov.maxfreq_table[DISABLE] = exynos_hpgov.maxfreq_table[QUAD];
+
+	for (i = 0; i <= QUAD; i++)
+		pr_info("HP_GOV: mode %d: max_freq = %d\n",
+				i, exynos_hpgov.maxfreq_table[i]);
+
+	return 0;
+
+exit:
+	pr_warn("HP_GOV: faield to parse dt!\n");
+	return -EINVAL;
+}
+
+extern unsigned long sec_cpumask;
+static int __init exynos_hpgov_boostable(void)
+{
+	return (exynos_hpgov.maxfreq_table[SINGLE]
+			> exynos_hpgov.maxfreq_table[QUAD]);
+}
+
+extern struct cpumask early_cpu_mask;
 static int __init exynos_hpgov_init(void)
 {
 	int ret = 0;
