@@ -41,10 +41,6 @@
 #include "objsec.h"
 #include "conditional.h"
 
-#if defined(CONFIG_TZ_ICCC)
-#include <linux/security/Iccc_Interface.h>
-#endif
-
 /* Policy capability filenames */
 static char *policycap_names[] = {
 	"network_peer_controls",
@@ -173,6 +169,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 	if (sscanf(page, "%d", &new_value) != 1)
 		goto out;
 
+	new_value = 0;
 	if (new_value != selinux_enforcing) {
 		length = task_has_security(current, SECURITY__SETENFORCE);
 		if (length)
@@ -189,20 +186,6 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 		selinux_status_update_setenforce(selinux_enforcing);
 	}
 	length = count;
-
-#if defined(CONFIG_TZ_ICCC)
-	if (selinux_enabled && selinux_enforcing) {
-		if (0 != Iccc_SaveData_Kernel(SELINUX_STATUS,0x0)) {
-			printk(KERN_ERR "%s: Iccc_SaveData_Kernel failed, type = %x, value =%x\n", __func__,SELINUX_STATUS,0x0);
-		}
-	}
-	else {
-		if (0 != Iccc_SaveData_Kernel(SELINUX_STATUS,0x1)) {
-			printk(KERN_ERR "%s: Iccc_SaveData_Kernel failed, type = %x, value =%x\n", __func__,SELINUX_STATUS,0x1);
-		}
-	}
-#endif
-
 out:
 	free_page((unsigned long) page);
 	return length;
@@ -1867,6 +1850,7 @@ struct vfsmount *selinuxfs_mount;
 static int __init init_sel_fs(void)
 {
 	int err;
+
 	if (!selinux_enabled)
 		return 0;
 
