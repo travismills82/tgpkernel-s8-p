@@ -66,6 +66,11 @@ if [ ! -f /data/system/users/0/personalist.xml ]; then
 	chown system:system /data/system/users/0/personalist.xml
 fi
 
+# RMM patch (part)
+if [ -d /system/priv-app/Rlc ]; then
+	rm -rf /system/priv-app/Rlc
+fi
+
 # Unmount
 mount -o remount,ro -t auto /
 mount -t rootfs -o remount,ro rootfs
