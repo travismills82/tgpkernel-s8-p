@@ -1425,6 +1425,14 @@ static int kbase_do_syncset(struct kbase_context *kctx,
 	kbase_os_mem_map_lock(kctx);
 	kbase_gpu_vm_lock(kctx);
 
+  /* MALI_SEC_INTEGRATION */
+#if defined (CONFIG_SOC_EXYNOS8895)
+  if (sset->size > 8*1024*1024) {
+       flush_all_cpu_caches();
+       goto out_unlock;
+  }
+#endif
+
 	/* find the region where the virtual address is contained */
 	reg = kbase_region_tracker_find_region_enclosing_address(kctx,
 			sset->mem_handle.basep.handle);
@@ -3391,8 +3399,8 @@ static int kbase_jd_user_buf_map(struct kbase_context *kctx,
 	pinned_pages = get_user_pages(NULL, mm,
 			address,
 			alloc->imported.user_buf.nr_pages,
-			reg->flags & KBASE_REG_GPU_WR ? FOLL_WRITE : 0,
-			pages, NULL);
+			reg->flags & KBASE_REG_GPU_WR,
+			0, pages, NULL);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 	pinned_pages = get_user_pages_remote(NULL, mm,
 			address,
